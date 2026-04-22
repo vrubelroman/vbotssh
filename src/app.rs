@@ -1,5 +1,7 @@
 use std::{
     io::{self, Stdout},
+    sync::mpsc::{self, Receiver, SyncSender, TrySendError},
+    thread,
     time::{Duration, Instant},
 };
 
@@ -25,18 +27,26 @@ pub struct App {
     pub pager: Pager,
     pub show_help: bool,
     should_quit: bool,
+    result_rx: Receiver<WorkerResult>,
     collectors: Vec<CollectorState>,
 }
 
 struct CollectorState {
     descriptor: HostDescriptor,
-    collector: Box<dyn HostCollector>,
     host: HostInfo,
     last_refresh_at: Option<Instant>,
+    refresh_tx: SyncSender<()>,
+    pending: bool,
+}
+
+struct WorkerResult {
+    host_id: String,
+    host: HostInfo,
 }
 
 impl App {
     pub fn new(config: AppConfig) -> Self {
+        let (result_tx, result_rx) = mpsc::channel();
         let mut collector_impls: Vec<Box<dyn HostCollector>> = vec![Box::new(LocalCollector::new(&config))];
         if let Ok(remote_collectors) = load_remote_collectors(&config) {
             collector_impls.extend(
@@ -47,61 +57,90 @@ impl App {
         }
         let collectors = collector_impls
             .into_iter()
-            .map(|collector| {
+            .map(|mut collector| {
                 let descriptor = collector.descriptor();
-                let host = HostInfo::loading(descriptor.clone());
+                let (refresh_tx, refresh_rx) = mpsc::sync_channel::<()>(1);
+                let host = if descriptor.host_type == HostType::Local {
+                    collect_with_fallback(&mut *collector, &descriptor)
+                } else {
+                    HostInfo::loading(descriptor.clone())
+                };
+                let last_refresh_at = (descriptor.host_type == HostType::Local).then(Instant::now);
+                spawn_collector_worker(collector, descriptor.clone(), refresh_rx, result_tx.clone());
                 CollectorState {
                     descriptor,
-                    collector,
                     host,
-                    last_refresh_at: None,
+                    last_refresh_at,
+                    refresh_tx,
+                    pending: false,
                 }
             })
             .collect::<Vec<_>>();
-        let hosts = collectors.iter().map(|state| state.host.clone()).collect();
+        let hosts = sorted_hosts(&collectors, config.ssh.unreachable_to_end);
         let pager = Pager::new(config.default_page_size);
-
-        Self {
+        let mut app = Self {
             config,
             hosts,
             pager,
             show_help: false,
             should_quit: false,
+            result_rx,
             collectors,
-        }
+        };
+        app.request_initial_remote_refreshes();
+        app
     }
 
     pub fn refresh_all(&mut self) {
-        self.refresh_due(true);
+        self.poll_updates();
+        self.request_due_refreshes(true);
     }
 
     pub fn refresh_due(&mut self, force: bool) {
-        let now = Instant::now();
-        for state in &mut self.collectors {
-            if !force && !state.is_due(now, &self.config) {
-                continue;
-            }
-
-            let fallback = HostInfo::loading(state.descriptor.clone());
-            state.host = match state.collector.collect() {
-                    Ok(host) => host,
-                    Err(error) => {
-                        let mut failed = fallback;
-                        failed.status = crate::model::HostStatus::Error;
-                        failed.last_error = Some(error.to_string());
-                        failed
-                    }
-                };
-            state.last_refresh_at = Some(now);
-        }
-
-        self.rebuild_hosts();
+        self.poll_updates();
+        self.request_due_refreshes(force);
     }
 
     fn rebuild_hosts(&mut self) {
-        self.hosts = self.collectors.iter().map(|state| state.host.clone()).collect();
-        sort_hosts(&mut self.hosts, self.config.ssh.unreachable_to_end);
+        self.hosts = sorted_hosts(&self.collectors, self.config.ssh.unreachable_to_end);
         self.pager.clamp(self.hosts.len());
+    }
+
+    fn request_initial_remote_refreshes(&mut self) {
+        for state in &mut self.collectors {
+            if state.descriptor.host_type == HostType::Remote {
+                state.request_refresh();
+            }
+        }
+    }
+
+    fn request_due_refreshes(&mut self, force: bool) {
+        let now = Instant::now();
+        for state in &mut self.collectors {
+            if force || state.is_due(now, &self.config) {
+                state.request_refresh();
+            }
+        }
+    }
+
+    fn poll_updates(&mut self) {
+        let mut changed = false;
+        while let Ok(result) = self.result_rx.try_recv() {
+            if let Some(state) = self
+                .collectors
+                .iter_mut()
+                .find(|state| state.descriptor.id == result.host_id)
+            {
+                state.host = result.host;
+                state.last_refresh_at = Some(Instant::now());
+                state.pending = false;
+                changed = true;
+            }
+        }
+
+        if changed {
+            self.rebuild_hosts();
+        }
     }
 
     pub fn handle_key(&mut self, code: KeyCode) {
@@ -137,6 +176,10 @@ impl App {
 
 impl CollectorState {
     fn is_due(&self, now: Instant, config: &AppConfig) -> bool {
+        if self.pending {
+            return false;
+        }
+
         let interval = match self.descriptor.host_type {
             HostType::Local => Duration::from_millis(config.local_refresh_interval_ms),
             HostType::Remote => Duration::from_millis(config.remote_refresh_interval_ms),
@@ -145,6 +188,24 @@ impl CollectorState {
         self.last_refresh_at
             .map(|last_refresh_at| now.duration_since(last_refresh_at) >= interval)
             .unwrap_or(true)
+    }
+
+    fn request_refresh(&mut self) {
+        if self.pending {
+            return;
+        }
+
+        match self.refresh_tx.try_send(()) {
+            Ok(()) => {
+                self.pending = true;
+            }
+            Err(TrySendError::Full(_)) => {
+                self.pending = true;
+            }
+            Err(TrySendError::Disconnected(_)) => {
+                self.pending = false;
+            }
+        }
     }
 }
 
@@ -161,14 +222,14 @@ pub fn run(config: AppConfig) -> Result<()> {
 
 fn run_event_loop(terminal: &mut Terminal<CrosstermBackend<Stdout>>, config: AppConfig) -> Result<()> {
     let mut app = App::new(config);
-    app.refresh_all();
 
     let tick_rate = Duration::from_millis(250);
     let mut last_tick = Instant::now();
 
     loop {
-        let page_size = compute_page_size(terminal.size()?.width, app.config.default_page_size);
-        app.pager.set_page_size(page_size);
+        app.poll_updates();
+        terminal.size()?;
+        app.pager.set_page_size(compute_page_size());
         app.pager.clamp(app.hosts.len());
 
         terminal.draw(|frame| ui::render(frame, &app))?;
@@ -213,20 +274,14 @@ fn key_matches(binding: &str, code: &KeyCode) -> bool {
     }
 }
 
-fn compute_page_size(width: u16, configured_page_size: usize) -> usize {
-    let max_by_terminal = if width >= 150 {
-        3
-    } else if width >= 90 {
-        2
-    } else {
-        1
-    };
-    configured_page_size.min(max_by_terminal).max(1)
+fn compute_page_size() -> usize {
+    1
 }
 
-fn sort_hosts(hosts: &mut [HostInfo], unreachable_to_end: bool) {
+fn sorted_hosts(collectors: &[CollectorState], unreachable_to_end: bool) -> Vec<HostInfo> {
+    let mut hosts = collectors.iter().map(|state| state.host.clone()).collect::<Vec<_>>();
     if !unreachable_to_end {
-        return;
+        return hosts;
     }
 
     hosts.sort_by_key(|host| match (host.host_type, host.status) {
@@ -235,4 +290,39 @@ fn sort_hosts(hosts: &mut [HostInfo], unreachable_to_end: bool) {
         (HostType::Remote, HostStatus::Unreachable) => (2_u8, 0_u8),
         (HostType::Remote, HostStatus::Error) => (3_u8, 0_u8),
     });
+    hosts
+}
+
+fn spawn_collector_worker(
+    mut collector: Box<dyn HostCollector>,
+    descriptor: HostDescriptor,
+    refresh_rx: Receiver<()>,
+    result_tx: mpsc::Sender<WorkerResult>,
+) {
+    thread::spawn(move || {
+        while refresh_rx.recv().is_ok() {
+            let host = collect_with_fallback(&mut *collector, &descriptor);
+            if result_tx
+                .send(WorkerResult {
+                    host_id: descriptor.id.clone(),
+                    host,
+                })
+                .is_err()
+            {
+                break;
+            }
+        }
+    });
+}
+
+fn collect_with_fallback(collector: &mut dyn HostCollector, descriptor: &HostDescriptor) -> HostInfo {
+    match collector.collect() {
+        Ok(host) => host,
+        Err(error) => {
+            let mut failed = HostInfo::loading(descriptor.clone());
+            failed.status = HostStatus::Error;
+            failed.last_error = Some(error.to_string());
+            failed
+        }
+    }
 }

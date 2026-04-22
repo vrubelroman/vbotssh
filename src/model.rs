@@ -37,6 +37,8 @@ pub struct MetricsSnapshot {
     pub memory_total_bytes: u64,
     pub memory_usage_percent: f64,
     pub disks: Vec<DiskInfo>,
+    pub docker_containers: Vec<DockerContainerInfo>,
+    pub docker_error: Option<String>,
 }
 
 #[allow(dead_code)]
@@ -47,6 +49,13 @@ pub struct DiskInfo {
     pub used_bytes: u64,
     pub total_bytes: u64,
     pub usage_percent: f64,
+}
+
+#[derive(Clone, Debug)]
+pub struct DockerContainerInfo {
+    pub image: String,
+    pub created: String,
+    pub status: String,
 }
 
 #[derive(Clone, Debug)]

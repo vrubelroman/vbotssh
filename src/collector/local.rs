@@ -4,7 +4,11 @@ use anyhow::Result;
 use sysinfo::{ComponentExt, CpuExt, System, SystemExt};
 
 use crate::{
-    collector::{disks::collect_local_physical_disks, HostCollector},
+    collector::{
+        disks::collect_local_physical_disks,
+        docker::collect_local_docker_snapshot,
+        HostCollector,
+    },
     config::AppConfig,
     model::{HostDescriptor, HostInfo, HostStatus, HostType, MetricsSnapshot},
 };
@@ -63,6 +67,7 @@ impl HostCollector for LocalCollector {
         };
 
         let disks = collect_local_physical_disks()?;
+        let docker = collect_local_docker_snapshot()?;
 
         Ok(HostInfo {
             id: self.descriptor.id.clone(),
@@ -77,6 +82,8 @@ impl HostCollector for LocalCollector {
                 memory_total_bytes: total_memory,
                 memory_usage_percent,
                 disks,
+                docker_containers: docker.containers,
+                docker_error: docker.error,
             },
             last_updated: Some(SystemTime::now()),
             last_error: None,

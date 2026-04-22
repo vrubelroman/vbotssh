@@ -10,7 +10,7 @@ use ratatui::{
 
 use crate::{
     app::App,
-    model::{DiskInfo, HostInfo, HostStatus, HostType},
+    model::{DiskInfo, DockerContainerInfo, HostInfo, HostStatus, HostType},
     theme::{palette, Palette},
 };
 
@@ -103,12 +103,14 @@ fn render_host_column(frame: &mut Frame, area: Rect, host: &HostInfo, app: &App,
 
     let inner = outer.inner(area);
     let disk_lines = host.metrics.disks.len().max(2) as u16;
+    let docker_lines = docker_widget_lines(host).max(2);
     let layout = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
             Constraint::Length(3),
             Constraint::Length(3),
-            Constraint::Min(disk_lines),
+            Constraint::Length(disk_lines),
+            Constraint::Min(docker_lines),
             Constraint::Length(2),
         ])
         .split(inner);
@@ -148,7 +150,8 @@ fn render_host_column(frame: &mut Frame, area: Rect, host: &HostInfo, app: &App,
     );
 
     render_disks(frame, layout[2], &host.metrics.disks, app, palette);
-    render_status(frame, layout[3], host, app, palette);
+    render_docker(frame, layout[3], host, palette);
+    render_status(frame, layout[4], host, app, palette);
 }
 
 fn render_gauge(
@@ -293,9 +296,59 @@ fn render_status(frame: &mut Frame, area: Rect, host: &HostInfo, app: &App, pale
     frame.render_widget(status, area);
 }
 
+fn render_docker(frame: &mut Frame, area: Rect, host: &HostInfo, palette: Palette) {
+    let lines = if let Some(error) = &host.metrics.docker_error {
+        vec![Line::from(Span::styled(
+            error,
+            Style::default().fg(palette.red),
+        ))]
+    } else if host.metrics.docker_containers.is_empty() {
+        vec![Line::from(Span::styled(
+            "No running containers",
+            Style::default().fg(palette.subtext),
+        ))]
+    } else {
+        let inner_width = area.width.saturating_sub(2) as usize;
+        let (image_width, created_width, status_width) = docker_column_widths(inner_width);
+
+        let mut lines = vec![docker_header_line(
+            image_width,
+            created_width,
+            status_width,
+            palette,
+        )];
+        lines.extend(
+            host.metrics
+                .docker_containers
+                .iter()
+                .map(|container| {
+                    docker_container_line(
+                        container,
+                        image_width,
+                        created_width,
+                        status_width,
+                        palette,
+                    )
+                }),
+        );
+        lines
+    };
+
+    let docker_widget = Paragraph::new(lines)
+        .block(
+            Block::default()
+                .title("Docker")
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(palette.overlay))
+                .style(Style::default().bg(palette.crust)),
+        )
+        .wrap(Wrap { trim: true });
+    frame.render_widget(docker_widget, area);
+}
+
 fn render_footer(frame: &mut Frame, area: Rect, app: &App, palette: Palette) {
     let hints = format!(
-        "{} prev  {} next  {} refresh  {} help  {} quit",
+        "{} / Left prev  {} / Right next  {} refresh  {} help  {} quit",
         app.config.keys.prev_page,
         app.config.keys.next_page,
         app.config.keys.refresh,
@@ -313,7 +366,10 @@ fn render_help_overlay(frame: &mut Frame, app: &App, palette: Palette) {
         Line::from(vec![
             Span::styled("Navigation", Style::default().fg(palette.mauve).add_modifier(Modifier::BOLD)),
         ]),
-        Line::from(format!("{} / {}  switch pages", app.config.keys.prev_page, app.config.keys.next_page)),
+        Line::from(format!(
+            "{} / Left  previous host    {} / Right  next host",
+            app.config.keys.prev_page, app.config.keys.next_page
+        )),
         Line::from(format!("{}  refresh metrics", app.config.keys.refresh)),
         Line::from(format!("{}  toggle help", app.config.keys.help)),
         Line::from(format!("{}  quit application", app.config.keys.quit)),
@@ -412,6 +468,126 @@ fn disk_mount_suffix(disk: &DiskInfo) -> String {
     }
 
     format!("  {},{} +{}", mountpoints[0], mountpoints[1], mountpoints.len() - 2)
+}
+
+fn docker_widget_lines(host: &HostInfo) -> u16 {
+    if host.metrics.docker_error.is_some() || host.metrics.docker_containers.is_empty() {
+        2
+    } else {
+        host.metrics.docker_containers.len() as u16 + 1
+    }
+}
+
+fn docker_header_line(
+    image_width: usize,
+    created_width: usize,
+    status_width: usize,
+    palette: Palette,
+) -> Line<'static> {
+    Line::from(vec![
+        Span::styled(
+            pad_or_truncate("IMAGE", image_width),
+            Style::default().fg(palette.overlay).add_modifier(Modifier::BOLD),
+        ),
+        Span::raw(" "),
+        Span::styled(
+            pad_or_truncate("CREATED", created_width),
+            Style::default().fg(palette.overlay).add_modifier(Modifier::BOLD),
+        ),
+        Span::raw(" "),
+        Span::styled(
+            pad_or_truncate("STATUS", status_width),
+            Style::default().fg(palette.overlay).add_modifier(Modifier::BOLD),
+        ),
+    ])
+}
+
+fn docker_container_line(
+    container: &DockerContainerInfo,
+    image_width: usize,
+    created_width: usize,
+    status_width: usize,
+    palette: Palette,
+) -> Line<'static> {
+    let image = truncate_text(&fallback_text(&container.image, "-"), 35);
+
+    Line::from(vec![
+        Span::styled(
+            pad_or_truncate(&image, image_width),
+            Style::default().fg(palette.sapphire),
+        ),
+        Span::raw(" "),
+        Span::styled(
+            pad_or_truncate(&fallback_text(&container.created, "-"), created_width),
+            Style::default().fg(palette.subtext),
+        ),
+        Span::raw(" "),
+        Span::styled(
+            pad_or_truncate(&fallback_text(&container.status, "-"), status_width),
+            Style::default().fg(docker_status_color(container, palette)),
+        ),
+    ])
+}
+
+fn docker_container_is_problem(container: &DockerContainerInfo) -> bool {
+    let status = container.status.to_ascii_lowercase();
+    status.contains("restarting")
+        || status.contains("unhealthy")
+        || status.contains("dead")
+        || status.contains("paused")
+        || status.contains("removing")
+}
+
+fn docker_status_color(container: &DockerContainerInfo, palette: Palette) -> ratatui::style::Color {
+    let status = container.status.to_ascii_lowercase();
+    if docker_container_is_problem(container) {
+        palette.red
+    } else if status.contains("healthy") || status.starts_with("up ") || status == "up" {
+        palette.green
+    } else {
+        palette.yellow
+    }
+}
+
+fn docker_column_widths(inner_width: usize) -> (usize, usize, usize) {
+    let content_width = inner_width.saturating_sub(2);
+    let total_width = content_width.saturating_sub(2);
+
+    if total_width <= 24 {
+        return (10, 6, total_width.saturating_sub(16).max(8));
+    }
+
+    let image_width = (total_width * 48 / 100).clamp(16, 36);
+    let created_width = (total_width * 18 / 100).clamp(10, 14);
+    let status_width = total_width.saturating_sub(image_width + created_width).max(12);
+
+    (image_width, created_width, status_width)
+}
+
+fn fallback_text(value: &str, fallback: &str) -> String {
+    if value.trim().is_empty() {
+        fallback.to_string()
+    } else {
+        value.trim().to_string()
+    }
+}
+
+fn truncate_text(value: &str, max_chars: usize) -> String {
+    let chars = value.chars().collect::<Vec<_>>();
+    if chars.len() <= max_chars {
+        return value.to_string();
+    }
+
+    if max_chars <= 3 {
+        return ".".repeat(max_chars);
+    }
+
+    chars[..max_chars - 3].iter().collect::<String>() + "..."
+}
+
+fn pad_or_truncate(value: &str, width: usize) -> String {
+    let value = truncate_text(value, width);
+    format!("{value:<width$}")
 }
 
 #[cfg(test)]

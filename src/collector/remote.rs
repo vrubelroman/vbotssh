@@ -12,7 +12,11 @@ use std::{
 use anyhow::{Context, Result};
 
 use crate::{
-    collector::{disks::parse_physical_disks_json, HostCollector},
+    collector::{
+        disks::parse_physical_disks_json,
+        docker::{parse_docker_ps_output, DockerSnapshot},
+        HostCollector,
+    },
     config::AppConfig,
     model::{HostDescriptor, HostInfo, HostStatus, HostType, MetricsSnapshot},
 };
@@ -337,6 +341,13 @@ printf 'mem_total=%s\n' "$mem_total"
 printf '__LSBLK_BEGIN__\n'
 lsblk -J -b -o NAME,KNAME,PKNAME,PATH,TYPE,MOUNTPOINTS,SIZE,FSUSED 2>/dev/null || true
 printf '\n__LSBLK_END__\n'
+printf '__DOCKER_BEGIN__\n'
+if docker_output="$(docker ps --format '{{.Image}}\t{{.RunningFor}}\t{{.Status}}' 2>&1)"; then
+  printf '%s\n' "$docker_output"
+else
+  printf 'docker_error=%s\n' "$docker_output"
+fi
+printf '__DOCKER_END__\n'
 "#
 }
 
@@ -380,7 +391,10 @@ fn parse_remote_metrics(stdout: &str) -> std::result::Result<MetricsSnapshot, Re
     let mut memory_used_bytes = None;
     let mut memory_total_bytes = None;
     let mut lsblk_lines = Vec::new();
+    let mut docker_lines = Vec::new();
+    let mut docker_error = None;
     let mut in_lsblk = false;
+    let mut in_docker = false;
 
     for raw_line in stdout.lines() {
         let line = raw_line.trim();
@@ -398,8 +412,29 @@ fn parse_remote_metrics(stdout: &str) -> std::result::Result<MetricsSnapshot, Re
             continue;
         }
 
+        if line == "__DOCKER_BEGIN__" {
+            in_docker = true;
+            continue;
+        }
+
+        if line == "__DOCKER_END__" {
+            in_docker = false;
+            continue;
+        }
+
         if in_lsblk {
             lsblk_lines.push(raw_line);
+            continue;
+        }
+
+        if in_docker {
+            if let Some(value) = line.strip_prefix("docker_error=") {
+                if !value.trim().is_empty() {
+                    docker_error = Some(value.trim().to_string());
+                }
+            } else {
+                docker_lines.push(raw_line);
+            }
             continue;
         }
 
@@ -437,6 +472,10 @@ fn parse_remote_metrics(stdout: &str) -> std::result::Result<MetricsSnapshot, Re
         parse_physical_disks_json(&lsblk_lines.join("\n"))
             .map_err(|error| RemoteCollectError::Error(error.to_string()))?
     };
+    let docker = DockerSnapshot {
+        containers: parse_docker_ps_output(&docker_lines.join("\n")),
+        error: docker_error,
+    };
 
     Ok(MetricsSnapshot {
         cpu_usage_percent: cpu_usage_percent
@@ -446,6 +485,8 @@ fn parse_remote_metrics(stdout: &str) -> std::result::Result<MetricsSnapshot, Re
         memory_total_bytes,
         memory_usage_percent: usage_percent(memory_used_bytes, memory_total_bytes),
         disks,
+        docker_containers: docker.containers,
+        docker_error: docker.error,
     })
 }
 
@@ -503,6 +544,10 @@ mem_total=200
 __LSBLK_BEGIN__
 {"blockdevices":[{"name":"sda","type":"disk","size":100,"fsused":null,"mountpoints":null,"children":[{"name":"sda1","type":"part","size":80,"fsused":50,"mountpoints":["/"]},{"name":"sda2","type":"part","size":20,"fsused":10,"mountpoints":["/boot"]}]}]}
 __LSBLK_END__
+__DOCKER_BEGIN__
+nginx:latest	2 hours ago	Up 2 hours
+worker:latest	1 day ago	Restarting (1) 10 seconds ago
+__DOCKER_END__
 "#;
 
         let metrics = parse_remote_metrics(payload).unwrap();
@@ -511,6 +556,8 @@ __LSBLK_END__
         assert_eq!(metrics.memory_usage_percent, 50.0);
         assert_eq!(metrics.disks.len(), 1);
         assert_eq!(metrics.disks[0].mount_point, "/,/boot");
+        assert_eq!(metrics.docker_containers.len(), 2);
+        assert_eq!(metrics.docker_containers[1].status, "Restarting (1) 10 seconds ago");
     }
 
     fn unique_test_path(prefix: &str) -> PathBuf {
