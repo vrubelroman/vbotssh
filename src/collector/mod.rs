@@ -1,6 +1,7 @@
 pub mod disks;
 pub mod docker;
 pub mod local;
+pub mod net;
 pub mod remote;
 
 use anyhow::Result;

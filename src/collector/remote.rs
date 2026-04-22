@@ -5,8 +5,7 @@ use std::{
     path::{Path, PathBuf},
     process::{Command, Stdio},
     thread,
-    time::Duration,
-    time::SystemTime,
+    time::{Duration, Instant, SystemTime},
 };
 
 use anyhow::{Context, Result};
@@ -15,6 +14,7 @@ use crate::{
     collector::{
         disks::parse_physical_disks_json,
         docker::{parse_docker_ps_output, DockerSnapshot},
+        net::NetworkCounters,
         HostCollector,
     },
     config::AppConfig,
@@ -44,6 +44,7 @@ pub struct RemoteCollector {
     ssh_connect_timeout_ms: u64,
     host_ping_timeout_ms: u64,
     prefer_ssh_over_ping_check: bool,
+    previous_network_sample: Option<NetworkSample>,
 }
 
 impl RemoteCollector {
@@ -61,10 +62,11 @@ impl RemoteCollector {
             ssh_connect_timeout_ms: config.ssh.ssh_connect_timeout_ms,
             host_ping_timeout_ms: config.ssh.host_ping_timeout_ms,
             prefer_ssh_over_ping_check: config.ssh.prefer_ssh_over_ping_check,
+            previous_network_sample: None,
         }
     }
 
-    fn collect_remote_metrics(&self) -> std::result::Result<MetricsSnapshot, RemoteCollectError> {
+    fn collect_remote_metrics(&mut self) -> std::result::Result<MetricsSnapshot, RemoteCollectError> {
         for attempt in 0..=1 {
             match self.collect_remote_metrics_once() {
                 Ok(metrics) => return Ok(metrics),
@@ -78,7 +80,7 @@ impl RemoteCollector {
         Err(RemoteCollectError::Error("unexpected remote retry state".to_string()))
     }
 
-    fn collect_remote_metrics_once(&self) -> std::result::Result<MetricsSnapshot, RemoteCollectError> {
+    fn collect_remote_metrics_once(&mut self) -> std::result::Result<MetricsSnapshot, RemoteCollectError> {
         if !self.prefer_ssh_over_ping_check {
             self.check_ping()?;
         }
@@ -122,9 +124,20 @@ impl RemoteCollector {
             return Err(classify_ssh_failure(&stderr));
         }
 
-        parse_remote_metrics(
+        let mut metrics = parse_remote_metrics(
             &String::from_utf8_lossy(&output.stdout),
-        )
+        )?;
+        let captured_at = Instant::now();
+        let (network_receive_bytes_per_sec, network_transmit_bytes_per_sec) =
+            network_rates(self.previous_network_sample, metrics.network_counters, captured_at);
+        self.previous_network_sample = Some(NetworkSample {
+            counters: metrics.network_counters,
+            captured_at,
+        });
+        metrics.network_receive_bytes_per_sec = network_receive_bytes_per_sec;
+        metrics.network_transmit_bytes_per_sec = network_transmit_bytes_per_sec;
+
+        Ok(metrics)
     }
 
     fn check_ping(&self) -> std::result::Result<(), RemoteCollectError> {
@@ -193,6 +206,12 @@ struct SshHostEntry {
 enum RemoteCollectError {
     Unreachable(String),
     Error(String),
+}
+
+#[derive(Clone, Copy, Debug)]
+struct NetworkSample {
+    counters: NetworkCounters,
+    captured_at: Instant,
 }
 
 impl RemoteCollectError {
@@ -338,6 +357,20 @@ printf 'cpu_usage=%s\n' "$cpu_usage"
 printf 'cpu_temp=%s\n' "$cpu_temp"
 printf 'mem_used=%s\n' "$mem_used"
 printf 'mem_total=%s\n' "$mem_total"
+read net_rx net_tx <<EOF
+$(awk -F ':' 'NR > 2 {
+  iface=$1
+  gsub(/[[:space:]]/, "", iface)
+  if (iface == "" || iface == "lo") next
+  stats_line=$2
+  gsub(/^[[:space:]]+/, "", stats_line)
+  split(stats_line, stats, /[[:space:]]+/)
+  rx += stats[1]
+  tx += stats[9]
+} END { printf "%.0f %.0f\n", rx, tx }' /proc/net/dev)
+EOF
+printf 'net_rx=%s\n' "$net_rx"
+printf 'net_tx=%s\n' "$net_tx"
 printf '__LSBLK_BEGIN__\n'
 lsblk -J -b -o NAME,KNAME,PKNAME,PATH,TYPE,MOUNTPOINTS,SIZE,FSUSED 2>/dev/null || true
 printf '\n__LSBLK_END__\n'
@@ -390,6 +423,8 @@ fn parse_remote_metrics(stdout: &str) -> std::result::Result<MetricsSnapshot, Re
     let mut cpu_temperature_celsius = None;
     let mut memory_used_bytes = None;
     let mut memory_total_bytes = None;
+    let mut network_receive_bytes = None;
+    let mut network_transmit_bytes = None;
     let mut lsblk_lines = Vec::new();
     let mut docker_lines = Vec::new();
     let mut docker_error = None;
@@ -459,6 +494,15 @@ fn parse_remote_metrics(stdout: &str) -> std::result::Result<MetricsSnapshot, Re
             memory_total_bytes = Some(parse_u64(value, "mem_total")?);
             continue;
         }
+
+        if let Some(value) = line.strip_prefix("net_rx=") {
+            network_receive_bytes = Some(parse_u64(value, "net_rx")?);
+            continue;
+        }
+
+        if let Some(value) = line.strip_prefix("net_tx=") {
+            network_transmit_bytes = Some(parse_u64(value, "net_tx")?);
+        }
     }
 
     let memory_total_bytes =
@@ -484,6 +528,14 @@ fn parse_remote_metrics(stdout: &str) -> std::result::Result<MetricsSnapshot, Re
         memory_used_bytes,
         memory_total_bytes,
         memory_usage_percent: usage_percent(memory_used_bytes, memory_total_bytes),
+        network_receive_bytes_per_sec: None,
+        network_transmit_bytes_per_sec: None,
+        network_counters: NetworkCounters {
+            receive_bytes: network_receive_bytes
+                .ok_or_else(|| RemoteCollectError::Error("missing net_rx".to_string()))?,
+            transmit_bytes: network_transmit_bytes
+                .ok_or_else(|| RemoteCollectError::Error("missing net_tx".to_string()))?,
+        },
         disks,
         docker_containers: docker.containers,
         docker_error: docker.error,
@@ -508,6 +560,32 @@ fn usage_percent(used: u64, total: u64) -> f64 {
     } else {
         used as f64 * 100.0 / total as f64
     }
+}
+
+fn network_rates(
+    previous: Option<NetworkSample>,
+    current_counters: NetworkCounters,
+    captured_at: Instant,
+) -> (Option<f64>, Option<f64>) {
+    let Some(previous) = previous else {
+        return (None, None);
+    };
+
+    let elapsed_seconds = captured_at.duration_since(previous.captured_at).as_secs_f64();
+    if elapsed_seconds <= f64::EPSILON {
+        return (None, None);
+    }
+
+    let receive_bytes_per_sec = current_counters
+        .receive_bytes
+        .saturating_sub(previous.counters.receive_bytes) as f64
+        / elapsed_seconds;
+    let transmit_bytes_per_sec = current_counters
+        .transmit_bytes
+        .saturating_sub(previous.counters.transmit_bytes) as f64
+        / elapsed_seconds;
+
+    (Some(receive_bytes_per_sec), Some(transmit_bytes_per_sec))
 }
 
 #[cfg(test)]
@@ -541,6 +619,8 @@ cpu_usage=12.5
 cpu_temp=58.0
 mem_used=100
 mem_total=200
+net_rx=2048
+net_tx=4096
 __LSBLK_BEGIN__
 {"blockdevices":[{"name":"sda","type":"disk","size":100,"fsused":null,"mountpoints":null,"children":[{"name":"sda1","type":"part","size":80,"fsused":50,"mountpoints":["/"]},{"name":"sda2","type":"part","size":20,"fsused":10,"mountpoints":["/boot"]}]}]}
 __LSBLK_END__
@@ -554,6 +634,8 @@ __DOCKER_END__
         assert_eq!(metrics.cpu_usage_percent, 12.5);
         assert_eq!(metrics.cpu_temperature_celsius, Some(58.0));
         assert_eq!(metrics.memory_usage_percent, 50.0);
+        assert_eq!(metrics.network_counters.receive_bytes, 2048);
+        assert_eq!(metrics.network_counters.transmit_bytes, 4096);
         assert_eq!(metrics.disks.len(), 1);
         assert_eq!(metrics.disks[0].mount_point, "/,/boot");
         assert_eq!(metrics.docker_containers.len(), 2);

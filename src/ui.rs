@@ -135,13 +135,15 @@ fn render_host_column(frame: &mut Frame, area: Rect, host: &HostInfo, app: &App,
 
     let inner = outer.inner(area);
     let disk_lines = disk_widget_height(host);
+    let net_lines = net_widget_height();
+    let storage_row_lines = disk_lines.max(net_lines);
     let docker_lines = docker_widget_lines(host);
     let layout = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
             Constraint::Length(3),
             Constraint::Length(3),
-            Constraint::Length(disk_lines),
+            Constraint::Length(storage_row_lines),
             Constraint::Min(docker_lines),
             Constraint::Length(3),
         ])
@@ -181,7 +183,12 @@ fn render_host_column(frame: &mut Frame, area: Rect, host: &HostInfo, app: &App,
         palette,
     );
 
-    render_disks(frame, layout[2], &host.metrics.disks, app, palette);
+    let storage_layout = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
+        .split(layout[2]);
+    render_disks(frame, storage_layout[0], &host.metrics.disks, app, palette);
+    render_net(frame, storage_layout[1], host, palette);
     render_docker(frame, layout[3], host, palette);
     render_status(frame, layout[4], host, app, palette);
 }
@@ -296,6 +303,34 @@ fn render_disks(frame: &mut Frame, area: Rect, disks: &[DiskInfo], app: &App, pa
         )
         .wrap(Wrap { trim: true });
     frame.render_widget(disks_widget, area);
+}
+
+fn render_net(frame: &mut Frame, area: Rect, host: &HostInfo, palette: Palette) {
+    let lines = vec![
+        net_rate_line(
+            "Down",
+            host.metrics.network_receive_bytes_per_sec,
+            palette.sapphire,
+            palette,
+        ),
+        net_rate_line(
+            "Up",
+            host.metrics.network_transmit_bytes_per_sec,
+            palette.green,
+            palette,
+        ),
+    ];
+
+    let net_widget = Paragraph::new(lines)
+        .block(
+            Block::default()
+                .title("Net")
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(palette.overlay))
+                .style(Style::default().bg(palette.crust)),
+        )
+        .wrap(Wrap { trim: true });
+    frame.render_widget(net_widget, area);
 }
 
 fn render_status(frame: &mut Frame, area: Rect, host: &HostInfo, app: &App, palette: Palette) {
@@ -520,6 +555,10 @@ fn disk_widget_height(host: &HostInfo) -> u16 {
     content_lines as u16 + 2
 }
 
+fn net_widget_height() -> u16 {
+    4
+}
+
 fn docker_header_line(
     image_width: usize,
     created_width: usize,
@@ -630,6 +669,30 @@ fn truncate_text(value: &str, max_chars: usize) -> String {
 fn pad_or_truncate(value: &str, width: usize) -> String {
     let value = truncate_text(value, width);
     format!("{value:<width$}")
+}
+
+fn net_rate_line(label: &str, rate_bytes_per_sec: Option<f64>, accent: ratatui::style::Color, palette: Palette) -> Line<'static> {
+    let value = rate_bytes_per_sec
+        .map(format_rate)
+        .unwrap_or_else(|| "waiting...".to_string());
+
+    Line::from(vec![
+        Span::styled(
+            format!("{label:<5}"),
+            Style::default().fg(accent).add_modifier(Modifier::BOLD),
+        ),
+        Span::styled(value, Style::default().fg(palette.text)),
+    ])
+}
+
+fn format_rate(rate_bytes_per_sec: f64) -> String {
+    if rate_bytes_per_sec >= 1024.0 * 1024.0 {
+        format!("{:.1} MB/s", rate_bytes_per_sec / (1024.0 * 1024.0))
+    } else if rate_bytes_per_sec >= 1024.0 {
+        format!("{:.1} KB/s", rate_bytes_per_sec / 1024.0)
+    } else {
+        format!("{:.0} B/s", rate_bytes_per_sec)
+    }
 }
 
 fn host_list_item_lines(

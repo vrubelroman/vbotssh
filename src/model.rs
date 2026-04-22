@@ -1,3 +1,5 @@
+use crate::collector::net::NetworkCounters;
+
 use std::time::SystemTime;
 
 #[allow(dead_code)]
@@ -36,6 +38,9 @@ pub struct MetricsSnapshot {
     pub memory_used_bytes: u64,
     pub memory_total_bytes: u64,
     pub memory_usage_percent: f64,
+    pub network_receive_bytes_per_sec: Option<f64>,
+    pub network_transmit_bytes_per_sec: Option<f64>,
+    pub network_counters: NetworkCounters,
     pub disks: Vec<DiskInfo>,
     pub docker_containers: Vec<DockerContainerInfo>,
     pub docker_error: Option<String>,
