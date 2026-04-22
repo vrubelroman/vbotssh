@@ -1,45 +1,83 @@
-# vsysmonitor
+# vbotssh
 
-TUI-монитор системных ресурсов для Linux на Rust. Текущая реализация закрывает этап 1 из ТЗ: локальный хост, CPU/RAM/Disk, конфиг, горячие клавиши и paging-архитектуру под будущие удаленные хосты.
+`vbotssh` is a Rust TUI monitor for Linux hosts. It shows local and remote hosts in one interface, polls remote machines over SSH, and renders CPU, temperature, RAM, disks, network throughput, and Docker container status.
 
-## Что уже заложено
+## Features
 
-- единая модель `HostInfo` для local/remote;
-- слой `collector` с локальным сборщиком как первой реализацией;
-- UI, который рендерит список хостов и умеет page-based navigation;
-- конфиг через XDG-путь `~/.config/vsysmonitor/config.toml`;
-- тема по умолчанию: `Catppuccin Mocha`.
+- local host metrics with immediate first paint;
+- remote host polling from `~/.ssh/config`;
+- separate refresh intervals for local and remote hosts;
+- Catppuccin Mocha themed terminal UI;
+- Docker status widget with unhealthy containers highlighted;
+- packaging for NixOS, Debian-based systems, and Arch Linux.
 
-## Структура
+## Runtime requirements
 
-- [src/app.rs](/home/vrubel/projects/vsysmonitor/src/app.rs)
-- [src/config.rs](/home/vrubel/projects/vsysmonitor/src/config.rs)
-- [src/model.rs](/home/vrubel/projects/vsysmonitor/src/model.rs)
-- [src/navigation.rs](/home/vrubel/projects/vsysmonitor/src/navigation.rs)
-- [src/collector/local.rs](/home/vrubel/projects/vsysmonitor/src/collector/local.rs)
-- [src/ui.rs](/home/vrubel/projects/vsysmonitor/src/ui.rs)
-- [assets/config.example.toml](/home/vrubel/projects/vsysmonitor/assets/config.example.toml)
+`vbotssh` reads several metrics by calling standard Linux tools:
 
-## Сборка
+- `ssh` from OpenSSH for remote polling;
+- `ping` from `iputils` when ping pre-check is enabled;
+- `lsblk` from `util-linux` for physical disk layout;
+- `docker` optionally, for the Docker widget.
 
-Когда Rust toolchain установлен:
+## Configuration
 
-```bash
-cargo run
+The user config lives at:
+
+```text
+~/.config/vbotssh/config.toml
 ```
 
-Чтобы использовать свой конфиг:
+Example setup:
 
 ```bash
-mkdir -p ~/.config/vsysmonitor
-cp assets/config.example.toml ~/.config/vsysmonitor/config.toml
+mkdir -p ~/.config/vbotssh
+cp assets/config.example.toml ~/.config/vbotssh/config.toml
 ```
 
-## Закладка под пакетирование
+## Running from source
 
-Проект сознательно сделан как обычный `cargo`-пакет без привязки к конкретной системе сборки. Это упростит:
+```bash
+cargo run --release
+```
 
-- публикацию исходников и инструкции для GitHub Releases;
-- добавление `PKGBUILD` для Arch;
-- добавление `flake.nix` или `default.nix` для NixOS;
-- сборку `.deb` позднее через отдельный packaging-layer, не меняя код приложения.
+## Installation
+
+### NixOS / Nix
+
+Build and run directly from the flake:
+
+```bash
+nix run github:vrubelroman/vbotssh
+```
+
+Install into the current profile:
+
+```bash
+nix profile install github:vrubelroman/vbotssh
+```
+
+### Debian / Ubuntu
+
+Release builds include a `.deb` artifact. Install it with:
+
+```bash
+sudo apt install ./vbotssh_<version>_amd64.deb
+```
+
+### Arch Linux
+
+A `PKGBUILD` is included in the repository. Build it with:
+
+```bash
+makepkg -si
+```
+
+## Releases
+
+Tagging a version like `v0.1.0` triggers the GitHub Actions release workflow:
+
+- runs `cargo test`;
+- builds the release binary;
+- builds the `.deb` package with `cargo-deb`;
+- publishes release artifacts to GitHub Releases.

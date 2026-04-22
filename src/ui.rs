@@ -16,7 +16,10 @@ use crate::{
 
 pub fn render(frame: &mut Frame, app: &App) {
     let palette = palette(&app.config);
-    frame.render_widget(Block::default().style(Style::default().bg(palette.base)), frame.size());
+    frame.render_widget(
+        Block::default().style(Style::default().bg(palette.base)),
+        frame.size(),
+    );
 
     let layout = Layout::default()
         .direction(Direction::Vertical)
@@ -43,13 +46,24 @@ fn render_header(frame: &mut Frame, area: Rect, app: &App, palette: Palette) {
     let selected = app.selected_host_index() + 1;
     let total_hosts = app.hosts.len().max(1);
     let title = Line::from(vec![
-        Span::styled("vsysmonitor", Style::default().fg(palette.mauve).add_modifier(Modifier::BOLD)),
+        Span::styled(
+            "vbotssh",
+            Style::default()
+                .fg(palette.mauve)
+                .add_modifier(Modifier::BOLD),
+        ),
         Span::raw("  "),
         Span::styled("theme:", Style::default().fg(palette.overlay)),
-        Span::styled(format!(" {}", app.config.theme.as_str()), Style::default().fg(palette.text)),
+        Span::styled(
+            format!(" {}", app.config.theme.as_str()),
+            Style::default().fg(palette.text),
+        ),
         Span::raw("  "),
         Span::styled("host:", Style::default().fg(palette.overlay)),
-        Span::styled(format!(" {selected}/{total_hosts}"), Style::default().fg(palette.text)),
+        Span::styled(
+            format!(" {selected}/{total_hosts}"),
+            Style::default().fg(palette.text),
+        ),
     ]);
 
     frame.render_widget(Paragraph::new(title).alignment(Alignment::Left), area);
@@ -57,7 +71,8 @@ fn render_header(frame: &mut Frame, area: Rect, app: &App, palette: Palette) {
 
 fn render_hosts(frame: &mut Frame, area: Rect, app: &App, palette: Palette) {
     if app.hosts.is_empty() {
-        let empty = Paragraph::new("No hosts configured").style(Style::default().fg(palette.subtext));
+        let empty =
+            Paragraph::new("No hosts configured").style(Style::default().fg(palette.subtext));
         let block = centered_block("Hosts", app.config.show_borders, palette);
         let inner = block.inner(area);
         frame.render_widget(block, area);
@@ -100,7 +115,13 @@ fn render_host_list(frame: &mut Frame, area: Rect, app: &App, palette: Palette) 
     for (index, host) in app.hosts[start..end].iter().enumerate() {
         let actual_index = start + index;
         let selected = actual_index == selected_index;
-        lines.extend(host_list_item_lines(host, selected, inner.width as usize, app, palette));
+        lines.extend(host_list_item_lines(
+            host,
+            selected,
+            inner.width as usize,
+            app,
+            palette,
+        ));
     }
 
     let widget = Paragraph::new(lines)
@@ -210,7 +231,12 @@ fn render_gauge(
                 .border_style(Style::default().fg(palette.overlay))
                 .style(Style::default().bg(palette.crust)),
         )
-        .gauge_style(Style::default().fg(color).bg(palette.crust).add_modifier(Modifier::BOLD))
+        .gauge_style(
+            Style::default()
+                .fg(color)
+                .bg(palette.crust)
+                .add_modifier(Modifier::BOLD),
+        )
         .label(label)
         .percent(value.clamp(0.0, 100.0).round() as u16);
     frame.render_widget(gauge, area);
@@ -265,7 +291,8 @@ fn render_disks(frame: &mut Frame, area: Rect, disks: &[DiskInfo], app: &App, pa
             Style::default().fg(palette.subtext),
         ))]
     } else {
-        disks.iter()
+        disks
+            .iter()
             .map(|disk| {
                 let color = palette.severity_color(
                     disk.usage_percent,
@@ -275,7 +302,9 @@ fn render_disks(frame: &mut Frame, area: Rect, disks: &[DiskInfo], app: &App, pa
                 Line::from(vec![
                     Span::styled(
                         format!("{:<10}", disk_label(disk)),
-                        Style::default().fg(palette.sapphire).add_modifier(Modifier::BOLD),
+                        Style::default()
+                            .fg(palette.sapphire)
+                            .add_modifier(Modifier::BOLD),
                     ),
                     Span::raw(" "),
                     Span::styled(
@@ -356,9 +385,12 @@ fn render_status(frame: &mut Frame, area: Rect, host: &HostInfo, app: &App, pale
     }
 
     let status = Paragraph::new(Line::from(spans))
-        .block(Block::default().title("Status").borders(Borders::ALL).border_style(
-            Style::default().fg(palette.overlay),
-        ))
+        .block(
+            Block::default()
+                .title("Status")
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(palette.overlay)),
+        )
         .wrap(Wrap { trim: true });
     frame.render_widget(status, area);
 }
@@ -384,20 +416,9 @@ fn render_docker(frame: &mut Frame, area: Rect, host: &HostInfo, palette: Palett
             status_width,
             palette,
         )];
-        lines.extend(
-            host.metrics
-                .docker_containers
-                .iter()
-                .map(|container| {
-                    docker_container_line(
-                        container,
-                        image_width,
-                        created_width,
-                        status_width,
-                        palette,
-                    )
-                }),
-        );
+        lines.extend(host.metrics.docker_containers.iter().map(|container| {
+            docker_container_line(container, image_width, created_width, status_width, palette)
+        }));
         lines
     };
 
@@ -430,10 +451,16 @@ fn render_help_overlay(frame: &mut Frame, app: &App, palette: Palette) {
     let area = centered_rect(60, 40, frame.size());
     frame.render_widget(Clear, area);
     let lines = vec![
-        Line::from(vec![
-            Span::styled("Navigation", Style::default().fg(palette.mauve).add_modifier(Modifier::BOLD)),
-        ]),
-        Line::from(format!("{} / Up / Left  previous host", app.config.keys.prev_page)),
+        Line::from(vec![Span::styled(
+            "Navigation",
+            Style::default()
+                .fg(palette.mauve)
+                .add_modifier(Modifier::BOLD),
+        )]),
+        Line::from(format!(
+            "{} / Up / Left  previous host",
+            app.config.keys.prev_page
+        )),
         Line::from(format!(
             "{} / Down / Right  next host",
             app.config.keys.next_page
@@ -480,7 +507,11 @@ fn centered_rect(width_percent: u16, height_percent: u16, area: Rect) -> Rect {
 fn centered_block<'a>(title: &'a str, show_borders: bool, palette: Palette) -> Block<'a> {
     Block::default()
         .title(title)
-        .borders(if show_borders { Borders::ALL } else { Borders::NONE })
+        .borders(if show_borders {
+            Borders::ALL
+        } else {
+            Borders::NONE
+        })
         .style(Style::default().bg(palette.mantle).fg(palette.text))
 }
 
@@ -535,7 +566,12 @@ fn disk_mount_suffix(disk: &DiskInfo) -> String {
         return format!("  {} +{}", root_mount, mountpoints.len() - 1);
     }
 
-    format!("  {},{} +{}", mountpoints[0], mountpoints[1], mountpoints.len() - 2)
+    format!(
+        "  {},{} +{}",
+        mountpoints[0],
+        mountpoints[1],
+        mountpoints.len() - 2
+    )
 }
 
 fn docker_widget_lines(host: &HostInfo) -> u16 {
@@ -568,17 +604,23 @@ fn docker_header_line(
     Line::from(vec![
         Span::styled(
             pad_or_truncate("IMAGE", image_width),
-            Style::default().fg(palette.overlay).add_modifier(Modifier::BOLD),
+            Style::default()
+                .fg(palette.overlay)
+                .add_modifier(Modifier::BOLD),
         ),
         Span::raw(" "),
         Span::styled(
             pad_or_truncate("CREATED", created_width),
-            Style::default().fg(palette.overlay).add_modifier(Modifier::BOLD),
+            Style::default()
+                .fg(palette.overlay)
+                .add_modifier(Modifier::BOLD),
         ),
         Span::raw(" "),
         Span::styled(
             pad_or_truncate("STATUS", status_width),
-            Style::default().fg(palette.overlay).add_modifier(Modifier::BOLD),
+            Style::default()
+                .fg(palette.overlay)
+                .add_modifier(Modifier::BOLD),
         ),
     ])
 }
@@ -640,7 +682,9 @@ fn docker_column_widths(inner_width: usize) -> (usize, usize, usize) {
 
     let image_width = (total_width * 48 / 100).clamp(16, 36);
     let created_width = (total_width * 18 / 100).clamp(10, 14);
-    let status_width = total_width.saturating_sub(image_width + created_width).max(12);
+    let status_width = total_width
+        .saturating_sub(image_width + created_width)
+        .max(12);
 
     (image_width, created_width, status_width)
 }
@@ -671,7 +715,12 @@ fn pad_or_truncate(value: &str, width: usize) -> String {
     format!("{value:<width$}")
 }
 
-fn net_rate_line(label: &str, rate_bytes_per_sec: Option<f64>, accent: ratatui::style::Color, palette: Palette) -> Line<'static> {
+fn net_rate_line(
+    label: &str,
+    rate_bytes_per_sec: Option<f64>,
+    accent: ratatui::style::Color,
+    palette: Palette,
+) -> Line<'static> {
     let value = rate_bytes_per_sec
         .map(format_rate)
         .unwrap_or_else(|| "waiting...".to_string());
@@ -702,7 +751,11 @@ fn host_list_item_lines(
     app: &App,
     palette: Palette,
 ) -> [Line<'static>; 4] {
-    let border_color = if selected { palette.green } else { palette.overlay };
+    let border_color = if selected {
+        palette.green
+    } else {
+        palette.overlay
+    };
     let border_style = Style::default().fg(border_color).bg(palette.mantle);
     let name_style = Style::default()
         .fg(host_list_name_color(host, app, palette))
@@ -716,9 +769,12 @@ fn host_list_item_lines(
     let name = truncate_text(&host.display_name, 28);
     let summary = match host.status {
         HostStatus::Loading => "waiting for metrics...".to_string(),
-        HostStatus::Unreachable | HostStatus::Error => {
-            fallback_text(host.last_error.as_deref().unwrap_or(host_status_label(host.status)), "-")
-        }
+        HostStatus::Unreachable | HostStatus::Error => fallback_text(
+            host.last_error
+                .as_deref()
+                .unwrap_or(host_status_label(host.status)),
+            "-",
+        ),
         HostStatus::Online => {
             let temp = host
                 .metrics
@@ -727,9 +783,7 @@ fn host_list_item_lines(
                 .unwrap_or_default();
             format!(
                 "CPU {:>4.1}%{}  RAM {:>4.1}%",
-                host.metrics.cpu_usage_percent,
-                temp,
-                host.metrics.memory_usage_percent
+                host.metrics.cpu_usage_percent, temp, host.metrics.memory_usage_percent
             )
         }
     };
@@ -738,22 +792,33 @@ fn host_list_item_lines(
     } else {
         ('┌', '┐', '└', '┘', '─', '│')
     };
-    let top_border = format!("{top_left}{}{top_right}", horizontal.to_string().repeat(inner_width));
-    let bottom_border =
-        format!("{bottom_left}{}{bottom_right}", horizontal.to_string().repeat(inner_width));
+    let top_border = format!(
+        "{top_left}{}{top_right}",
+        horizontal.to_string().repeat(inner_width)
+    );
+    let bottom_border = format!(
+        "{bottom_left}{}{bottom_right}",
+        horizontal.to_string().repeat(inner_width)
+    );
 
     [
         Line::from(Span::styled(top_border, border_style)),
         Line::from(vec![
             Span::styled(vertical.to_string(), border_style),
-            Span::styled(pad_or_truncate(&format!(" {name}"), inner_width), name_style),
+            Span::styled(
+                pad_or_truncate(&format!(" {name}"), inner_width),
+                name_style,
+            ),
             Span::styled(vertical.to_string(), border_style),
         ]),
         Line::from(vec![
             Span::styled(vertical.to_string(), border_style),
             Span::styled(
                 pad_or_truncate(
-                    &format!(" {}", truncate_text(&summary, inner_width.saturating_sub(1))),
+                    &format!(
+                        " {}",
+                        truncate_text(&summary, inner_width.saturating_sub(1))
+                    ),
                     inner_width,
                 ),
                 detail_style,

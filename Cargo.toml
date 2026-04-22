@@ -1,10 +1,27 @@
 [package]
-name = "vsysmonitor"
+name = "vbotssh"
 version = "0.1.0"
 edition = "2021"
 license = "MIT"
-description = "Terminal UI system monitor for Linux with architecture prepared for remote hosts"
-repository = "https://github.com/example/vsysmonitor"
+description = "Terminal UI system monitor for Linux with remote host support over SSH"
+repository = "https://github.com/vrubelroman/vbotssh"
+
+[[bin]]
+name = "vbotssh"
+path = "src/main.rs"
+
+[package.metadata.deb]
+name = "vbotssh"
+section = "utils"
+priority = "optional"
+depends = "$auto, openssh-client, iputils-ping, util-linux"
+recommends = "docker.io | docker-ce-cli"
+assets = [
+    ["target/release/vbotssh", "usr/bin/vbotssh", "755"],
+    ["README.md", "usr/share/doc/vbotssh/README.md", "644"],
+    ["assets/config.example.toml", "usr/share/doc/vbotssh/config.example.toml", "644"],
+    ["LICENSE", "usr/share/licenses/vbotssh/LICENSE", "644"],
+]
 
 [dependencies]
 anyhow = "1.0"

@@ -1,6 +1,5 @@
 use std::{
-    env,
-    fs,
+    env, fs,
     path::{Path, PathBuf},
 };
 
@@ -139,13 +138,14 @@ impl AppConfig {
 
     pub fn config_path() -> Result<PathBuf> {
         if let Ok(path) = env::var("XDG_CONFIG_HOME") {
-            return Ok(Path::new(&path).join("vsysmonitor").join("config.toml"));
+            return Ok(Path::new(&path).join("vbotssh").join("config.toml"));
         }
 
-        let home = env::var("HOME").context("HOME is not set and XDG_CONFIG_HOME is unavailable")?;
+        let home =
+            env::var("HOME").context("HOME is not set and XDG_CONFIG_HOME is unavailable")?;
         Ok(Path::new(&home)
             .join(".config")
-            .join("vsysmonitor")
+            .join("vbotssh")
             .join("config.toml"))
     }
 }
@@ -212,23 +212,44 @@ impl RawAppConfig {
         defaults.show_borders = self.show_borders.unwrap_or(defaults.show_borders);
         defaults.compact_mode = self.compact_mode.unwrap_or(defaults.compact_mode);
         defaults.show_help_hints = self.show_help_hints.unwrap_or(defaults.show_help_hints);
-        defaults.default_page_size = self.default_page_size.unwrap_or(defaults.default_page_size).max(1);
-        defaults.cpu_warning_threshold = self.cpu_warning_threshold.unwrap_or(defaults.cpu_warning_threshold);
-        defaults.cpu_critical_threshold = self.cpu_critical_threshold.unwrap_or(defaults.cpu_critical_threshold);
-        defaults.cpu_temp_warning_threshold =
-            self.cpu_temp_warning_threshold.unwrap_or(defaults.cpu_temp_warning_threshold);
-        defaults.cpu_temp_critical_threshold =
-            self.cpu_temp_critical_threshold.unwrap_or(defaults.cpu_temp_critical_threshold);
-        defaults.ram_warning_threshold = self.ram_warning_threshold.unwrap_or(defaults.ram_warning_threshold);
-        defaults.ram_critical_threshold = self.ram_critical_threshold.unwrap_or(defaults.ram_critical_threshold);
-        defaults.disk_warning_threshold = self.disk_warning_threshold.unwrap_or(defaults.disk_warning_threshold);
-        defaults.disk_critical_threshold = self.disk_critical_threshold.unwrap_or(defaults.disk_critical_threshold);
-        defaults.stale_data_timeout_ms = self.stale_data_timeout_ms.unwrap_or(defaults.stale_data_timeout_ms);
+        defaults.default_page_size = self
+            .default_page_size
+            .unwrap_or(defaults.default_page_size)
+            .max(1);
+        defaults.cpu_warning_threshold = self
+            .cpu_warning_threshold
+            .unwrap_or(defaults.cpu_warning_threshold);
+        defaults.cpu_critical_threshold = self
+            .cpu_critical_threshold
+            .unwrap_or(defaults.cpu_critical_threshold);
+        defaults.cpu_temp_warning_threshold = self
+            .cpu_temp_warning_threshold
+            .unwrap_or(defaults.cpu_temp_warning_threshold);
+        defaults.cpu_temp_critical_threshold = self
+            .cpu_temp_critical_threshold
+            .unwrap_or(defaults.cpu_temp_critical_threshold);
+        defaults.ram_warning_threshold = self
+            .ram_warning_threshold
+            .unwrap_or(defaults.ram_warning_threshold);
+        defaults.ram_critical_threshold = self
+            .ram_critical_threshold
+            .unwrap_or(defaults.ram_critical_threshold);
+        defaults.disk_warning_threshold = self
+            .disk_warning_threshold
+            .unwrap_or(defaults.disk_warning_threshold);
+        defaults.disk_critical_threshold = self
+            .disk_critical_threshold
+            .unwrap_or(defaults.disk_critical_threshold);
+        defaults.stale_data_timeout_ms = self
+            .stale_data_timeout_ms
+            .unwrap_or(defaults.stale_data_timeout_ms);
         defaults.show_all_disks = self.show_all_disks.unwrap_or(defaults.show_all_disks);
-        defaults.disk_include_mountpoints =
-            self.disk_include_mountpoints.unwrap_or(defaults.disk_include_mountpoints);
-        defaults.disk_exclude_mountpoints =
-            self.disk_exclude_mountpoints.unwrap_or(defaults.disk_exclude_mountpoints);
+        defaults.disk_include_mountpoints = self
+            .disk_include_mountpoints
+            .unwrap_or(defaults.disk_include_mountpoints);
+        defaults.disk_exclude_mountpoints = self
+            .disk_exclude_mountpoints
+            .unwrap_or(defaults.disk_exclude_mountpoints);
 
         if let Some(keys) = self.keys {
             defaults.keys.next_page = keys.next_page.unwrap_or(defaults.keys.next_page);
@@ -240,20 +261,28 @@ impl RawAppConfig {
 
         if let Some(ssh) = self.ssh {
             defaults.ssh.config_path = ssh.config_path.unwrap_or(defaults.ssh.config_path);
-            defaults.ssh.ssh_connect_timeout_ms =
-                ssh.ssh_connect_timeout_ms.unwrap_or(defaults.ssh.ssh_connect_timeout_ms);
-            defaults.ssh.host_ping_timeout_ms =
-                ssh.host_ping_timeout_ms.unwrap_or(defaults.ssh.host_ping_timeout_ms);
-            defaults.ssh.unreachable_to_end =
-                ssh.unreachable_to_end.unwrap_or(defaults.ssh.unreachable_to_end);
-            defaults.ssh.prefer_ssh_over_ping_check =
-                ssh.prefer_ssh_over_ping_check.unwrap_or(defaults.ssh.prefer_ssh_over_ping_check);
-            defaults.ssh.max_parallel_hosts =
-                ssh.max_parallel_hosts.unwrap_or(defaults.ssh.max_parallel_hosts).max(1);
-            defaults.ssh.enable_multiplexing =
-                ssh.enable_multiplexing.unwrap_or(defaults.ssh.enable_multiplexing);
-            defaults.ssh.control_persist_ms =
-                ssh.control_persist_ms.unwrap_or(defaults.ssh.control_persist_ms);
+            defaults.ssh.ssh_connect_timeout_ms = ssh
+                .ssh_connect_timeout_ms
+                .unwrap_or(defaults.ssh.ssh_connect_timeout_ms);
+            defaults.ssh.host_ping_timeout_ms = ssh
+                .host_ping_timeout_ms
+                .unwrap_or(defaults.ssh.host_ping_timeout_ms);
+            defaults.ssh.unreachable_to_end = ssh
+                .unreachable_to_end
+                .unwrap_or(defaults.ssh.unreachable_to_end);
+            defaults.ssh.prefer_ssh_over_ping_check = ssh
+                .prefer_ssh_over_ping_check
+                .unwrap_or(defaults.ssh.prefer_ssh_over_ping_check);
+            defaults.ssh.max_parallel_hosts = ssh
+                .max_parallel_hosts
+                .unwrap_or(defaults.ssh.max_parallel_hosts)
+                .max(1);
+            defaults.ssh.enable_multiplexing = ssh
+                .enable_multiplexing
+                .unwrap_or(defaults.ssh.enable_multiplexing);
+            defaults.ssh.control_persist_ms = ssh
+                .control_persist_ms
+                .unwrap_or(defaults.ssh.control_persist_ms);
         }
 
         defaults

@@ -46,7 +46,8 @@ struct WorkerResult {
 impl App {
     pub fn new(config: AppConfig) -> Self {
         let (result_tx, result_rx) = mpsc::channel();
-        let mut collector_impls: Vec<Box<dyn HostCollector>> = vec![Box::new(LocalCollector::new(&config))];
+        let mut collector_impls: Vec<Box<dyn HostCollector>> =
+            vec![Box::new(LocalCollector::new(&config))];
         if let Ok(remote_collectors) = load_remote_collectors(&config) {
             collector_impls.extend(
                 remote_collectors
@@ -65,7 +66,12 @@ impl App {
                     HostInfo::loading(descriptor.clone())
                 };
                 let last_refresh_at = (descriptor.host_type == HostType::Local).then(Instant::now);
-                spawn_collector_worker(collector, descriptor.clone(), refresh_rx, result_tx.clone());
+                spawn_collector_worker(
+                    collector,
+                    descriptor.clone(),
+                    refresh_rx,
+                    result_tx.clone(),
+                );
                 CollectorState {
                     descriptor,
                     host,
@@ -280,7 +286,10 @@ pub fn run(config: AppConfig) -> Result<()> {
     result
 }
 
-fn run_event_loop(terminal: &mut Terminal<CrosstermBackend<Stdout>>, config: AppConfig) -> Result<()> {
+fn run_event_loop(
+    terminal: &mut Terminal<CrosstermBackend<Stdout>>,
+    config: AppConfig,
+) -> Result<()> {
     let mut app = App::new(config);
 
     let tick_rate = Duration::from_millis(250);
@@ -333,7 +342,10 @@ fn key_matches(binding: &str, code: &KeyCode) -> bool {
 }
 
 fn sorted_hosts(collectors: &[CollectorState], unreachable_to_end: bool) -> Vec<HostInfo> {
-    let mut hosts = collectors.iter().map(|state| state.host.clone()).collect::<Vec<_>>();
+    let mut hosts = collectors
+        .iter()
+        .map(|state| state.host.clone())
+        .collect::<Vec<_>>();
     if !unreachable_to_end {
         return hosts;
     }
@@ -369,7 +381,10 @@ fn spawn_collector_worker(
     });
 }
 
-fn collect_with_fallback(collector: &mut dyn HostCollector, descriptor: &HostDescriptor) -> HostInfo {
+fn collect_with_fallback(
+    collector: &mut dyn HostCollector,
+    descriptor: &HostDescriptor,
+) -> HostInfo {
     match collector.collect() {
         Ok(host) => host,
         Err(error) => {

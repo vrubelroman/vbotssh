@@ -25,7 +25,9 @@ impl LocalCollector {
         let mut system = System::new_all();
         system.refresh_all();
 
-        let hostname = system.host_name().unwrap_or_else(|| "localhost".to_string());
+        let hostname = system
+            .host_name()
+            .unwrap_or_else(|| "localhost".to_string());
         Self {
             descriptor: HostDescriptor {
                 id: "local".to_string(),
@@ -59,8 +61,11 @@ impl HostCollector for LocalCollector {
     fn collect(&mut self) -> Result<HostInfo> {
         let network_counters = collect_local_network_counters()?;
         let network_sample_time = Instant::now();
-        let (network_receive_bytes_per_sec, network_transmit_bytes_per_sec) =
-            network_rates(self.previous_network_sample, network_counters, network_sample_time);
+        let (network_receive_bytes_per_sec, network_transmit_bytes_per_sec) = network_rates(
+            self.previous_network_sample,
+            network_counters,
+            network_sample_time,
+        );
         self.previous_network_sample = Some(NetworkSample {
             counters: network_counters,
             captured_at: network_sample_time,
@@ -121,7 +126,9 @@ fn network_rates(
         return (None, None);
     };
 
-    let elapsed_seconds = captured_at.duration_since(previous.captured_at).as_secs_f64();
+    let elapsed_seconds = captured_at
+        .duration_since(previous.captured_at)
+        .as_secs_f64();
     if elapsed_seconds <= f64::EPSILON {
         return (None, None);
     }

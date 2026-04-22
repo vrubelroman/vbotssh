@@ -11,11 +11,7 @@ pub struct DockerSnapshot {
 
 pub fn collect_local_docker_snapshot() -> Result<DockerSnapshot> {
     let output = Command::new("docker")
-        .args([
-            "ps",
-            "--format",
-            "{{.Image}}\t{{.RunningFor}}\t{{.Status}}",
-        ])
+        .args(["ps", "--format", "{{.Image}}\t{{.RunningFor}}\t{{.Status}}"])
         .output()
         .context("failed to run docker ps")?;
 
@@ -27,7 +23,10 @@ pub fn collect_local_docker_snapshot() -> Result<DockerSnapshot> {
     } else {
         Ok(DockerSnapshot {
             containers: Vec::new(),
-            error: Some(compact_error(&String::from_utf8_lossy(&output.stderr), "docker ps failed")),
+            error: Some(compact_error(
+                &String::from_utf8_lossy(&output.stderr),
+                "docker ps failed",
+            )),
         })
     }
 }

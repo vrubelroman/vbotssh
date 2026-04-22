@@ -7,7 +7,8 @@ pub struct NetworkCounters {
 }
 
 pub fn collect_local_network_counters() -> Result<NetworkCounters> {
-    let payload = std::fs::read_to_string("/proc/net/dev").context("failed to read /proc/net/dev")?;
+    let payload =
+        std::fs::read_to_string("/proc/net/dev").context("failed to read /proc/net/dev")?;
     parse_proc_net_dev(&payload)
 }
 

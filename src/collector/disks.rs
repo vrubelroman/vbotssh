@@ -7,7 +7,12 @@ use crate::model::DiskInfo;
 
 pub fn collect_local_physical_disks() -> Result<Vec<DiskInfo>> {
     let output = Command::new("lsblk")
-        .args(["-J", "-b", "-o", "NAME,KNAME,PKNAME,PATH,TYPE,MOUNTPOINTS,SIZE,FSUSED"])
+        .args([
+            "-J",
+            "-b",
+            "-o",
+            "NAME,KNAME,PKNAME,PATH,TYPE,MOUNTPOINTS,SIZE,FSUSED",
+        ])
         .output()
         .context("failed to run lsblk")?;
 
@@ -22,7 +27,8 @@ pub fn collect_local_physical_disks() -> Result<Vec<DiskInfo>> {
 }
 
 pub fn parse_physical_disks_json(payload: &str) -> Result<Vec<DiskInfo>> {
-    let snapshot: LsblkSnapshot = serde_json::from_str(payload).context("failed to parse lsblk JSON")?;
+    let snapshot: LsblkSnapshot =
+        serde_json::from_str(payload).context("failed to parse lsblk JSON")?;
 
     Ok(snapshot
         .blockdevices
@@ -55,7 +61,11 @@ fn disk_info_from_device(device: &LsblkDevice) -> Option<DiskInfo> {
     })
 }
 
-fn accumulate_child_usage(device: &LsblkDevice, used_bytes: &mut u64, mountpoints: &mut Vec<String>) {
+fn accumulate_child_usage(
+    device: &LsblkDevice,
+    used_bytes: &mut u64,
+    mountpoints: &mut Vec<String>,
+) {
     if let Some(value) = device.fsused {
         *used_bytes = used_bytes.saturating_add(value);
     }
@@ -100,7 +110,10 @@ struct LsblkDevice {
     device_type: String,
     #[serde(deserialize_with = "deserialize_u64_from_number_or_string")]
     size: u64,
-    #[serde(default, deserialize_with = "deserialize_option_u64_from_number_or_string")]
+    #[serde(
+        default,
+        deserialize_with = "deserialize_option_u64_from_number_or_string"
+    )]
     fsused: Option<u64>,
     mountpoints: Option<Vec<Option<String>>>,
     children: Option<Vec<LsblkDevice>>,
@@ -123,7 +136,9 @@ where
     }
 }
 
-fn deserialize_option_u64_from_number_or_string<'de, D>(deserializer: D) -> Result<Option<u64>, D::Error>
+fn deserialize_option_u64_from_number_or_string<'de, D>(
+    deserializer: D,
+) -> Result<Option<u64>, D::Error>
 where
     D: Deserializer<'de>,
 {

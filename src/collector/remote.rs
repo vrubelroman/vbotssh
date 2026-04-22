@@ -72,7 +72,9 @@ impl RemoteCollector {
         }
     }
 
-    fn collect_remote_metrics(&mut self) -> std::result::Result<MetricsSnapshot, RemoteCollectError> {
+    fn collect_remote_metrics(
+        &mut self,
+    ) -> std::result::Result<MetricsSnapshot, RemoteCollectError> {
         for attempt in 0..=1 {
             match self.collect_remote_metrics_once() {
                 Ok(metrics) => return Ok(metrics),
@@ -83,10 +85,14 @@ impl RemoteCollector {
             }
         }
 
-        Err(RemoteCollectError::Error("unexpected remote retry state".to_string()))
+        Err(RemoteCollectError::Error(
+            "unexpected remote retry state".to_string(),
+        ))
     }
 
-    fn collect_remote_metrics_once(&mut self) -> std::result::Result<MetricsSnapshot, RemoteCollectError> {
+    fn collect_remote_metrics_once(
+        &mut self,
+    ) -> std::result::Result<MetricsSnapshot, RemoteCollectError> {
         if !self.prefer_ssh_over_ping_check {
             self.check_ping()?;
         }
@@ -108,24 +114,27 @@ impl RemoteCollector {
             .ok_or_else(|| RemoteCollectError::Error("failed to open ssh stdin".to_string()))?;
         stdin
             .write_all(remote_metrics_script().as_bytes())
-            .map_err(|error| RemoteCollectError::Error(format!("failed to send remote script: {error}")))?;
+            .map_err(|error| {
+                RemoteCollectError::Error(format!("failed to send remote script: {error}"))
+            })?;
         drop(stdin);
 
-        let output = child
-            .wait_with_output()
-            .map_err(|error| RemoteCollectError::Error(format!("failed to read ssh output: {error}")))?;
+        let output = child.wait_with_output().map_err(|error| {
+            RemoteCollectError::Error(format!("failed to read ssh output: {error}"))
+        })?;
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
             return Err(classify_ssh_failure(&stderr));
         }
 
-        let mut metrics = parse_remote_metrics(
-            &String::from_utf8_lossy(&output.stdout),
-        )?;
+        let mut metrics = parse_remote_metrics(&String::from_utf8_lossy(&output.stdout))?;
         let captured_at = Instant::now();
-        let (network_receive_bytes_per_sec, network_transmit_bytes_per_sec) =
-            network_rates(self.previous_network_sample, metrics.network_counters, captured_at);
+        let (network_receive_bytes_per_sec, network_transmit_bytes_per_sec) = network_rates(
+            self.previous_network_sample,
+            metrics.network_counters,
+            captured_at,
+        );
         self.previous_network_sample = Some(NetworkSample {
             counters: metrics.network_counters,
             captured_at,
@@ -194,7 +203,10 @@ impl RemoteCollector {
                 .arg("-o")
                 .arg("ControlMaster=auto")
                 .arg("-o")
-                .arg(format!("ControlPersist={}s", (self.ssh_control_persist_ms / 1_000).max(1)))
+                .arg(format!(
+                    "ControlPersist={}s",
+                    (self.ssh_control_persist_ms / 1_000).max(1)
+                ))
                 .arg("-o")
                 .arg(format!("ControlPath={}", self.ssh_control_path.display()));
         }
@@ -216,9 +228,11 @@ impl HostCollector for RemoteCollector {
                 MetricsSnapshot::default(),
                 Some(message),
             )),
-            Err(RemoteCollectError::Error(message)) => {
-                Ok(self.host_with_status(HostStatus::Error, MetricsSnapshot::default(), Some(message)))
-            }
+            Err(RemoteCollectError::Error(message)) => Ok(self.host_with_status(
+                HostStatus::Error,
+                MetricsSnapshot::default(),
+                Some(message),
+            )),
         }
     }
 }
@@ -254,21 +268,20 @@ fn parse_ssh_config(path: &Path) -> Result<Vec<SshHostEntry>> {
     let mut current_host_name: Option<String> = None;
     let mut seen = HashSet::new();
 
-    let flush_block =
-        |hosts: &mut Vec<SshHostEntry>,
-         seen: &mut HashSet<String>,
-         aliases: &mut Vec<String>,
-         host_name: &mut Option<String>| {
-            for alias in aliases.drain(..) {
-                if seen.insert(alias.clone()) {
-                    hosts.push(SshHostEntry {
-                        alias,
-                        host_name: host_name.clone(),
-                    });
-                }
+    let flush_block = |hosts: &mut Vec<SshHostEntry>,
+                       seen: &mut HashSet<String>,
+                       aliases: &mut Vec<String>,
+                       host_name: &mut Option<String>| {
+        for alias in aliases.drain(..) {
+            if seen.insert(alias.clone()) {
+                hosts.push(SshHostEntry {
+                    alias,
+                    host_name: host_name.clone(),
+                });
             }
-            *host_name = None;
-        };
+        }
+        *host_name = None;
+    };
 
     for line in raw.lines() {
         let line = strip_comments(line).trim();
@@ -341,7 +354,7 @@ fn multiplex_control_path(alias: &str) -> PathBuf {
     let base_dir = env::var("XDG_RUNTIME_DIR")
         .map(PathBuf::from)
         .unwrap_or_else(|_| env::temp_dir());
-    base_dir.join("vsysmonitor-ssh").join(format!("{alias}-%C"))
+    base_dir.join("vbotssh-ssh").join(format!("{alias}-%C"))
 }
 
 fn remote_metrics_script() -> &'static str {
@@ -423,7 +436,10 @@ fn classify_ssh_failure(stderr: &str) -> RemoteCollectError {
     let lowered = stderr.to_ascii_lowercase();
 
     if lowered.contains("permission denied") || lowered.contains("host key verification failed") {
-        return RemoteCollectError::Error(compact_remote_error(stderr, "ssh authentication failed"));
+        return RemoteCollectError::Error(compact_remote_error(
+            stderr,
+            "ssh authentication failed",
+        ));
     }
 
     if lowered.contains("timed out")
@@ -539,10 +555,10 @@ fn parse_remote_metrics(stdout: &str) -> std::result::Result<MetricsSnapshot, Re
         }
     }
 
-    let memory_total_bytes =
-        memory_total_bytes.ok_or_else(|| RemoteCollectError::Error("missing mem_total".to_string()))?;
-    let memory_used_bytes =
-        memory_used_bytes.ok_or_else(|| RemoteCollectError::Error("missing mem_used".to_string()))?;
+    let memory_total_bytes = memory_total_bytes
+        .ok_or_else(|| RemoteCollectError::Error("missing mem_total".to_string()))?;
+    let memory_used_bytes = memory_used_bytes
+        .ok_or_else(|| RemoteCollectError::Error("missing mem_used".to_string()))?;
 
     let disks = if lsblk_lines.is_empty() {
         Vec::new()
@@ -577,15 +593,17 @@ fn parse_remote_metrics(stdout: &str) -> std::result::Result<MetricsSnapshot, Re
 }
 
 fn parse_f64(value: &str, field: &str) -> std::result::Result<f64, RemoteCollectError> {
-    value.trim().parse::<f64>().map_err(|error| {
-        RemoteCollectError::Error(format!("failed to parse {field}: {error}"))
-    })
+    value
+        .trim()
+        .parse::<f64>()
+        .map_err(|error| RemoteCollectError::Error(format!("failed to parse {field}: {error}")))
 }
 
 fn parse_u64(value: &str, field: &str) -> std::result::Result<u64, RemoteCollectError> {
-    value.trim().parse::<u64>().map_err(|error| {
-        RemoteCollectError::Error(format!("failed to parse {field}: {error}"))
-    })
+    value
+        .trim()
+        .parse::<u64>()
+        .map_err(|error| RemoteCollectError::Error(format!("failed to parse {field}: {error}")))
 }
 
 fn usage_percent(used: u64, total: u64) -> f64 {
@@ -605,7 +623,9 @@ fn network_rates(
         return (None, None);
     };
 
-    let elapsed_seconds = captured_at.duration_since(previous.captured_at).as_secs_f64();
+    let elapsed_seconds = captured_at
+        .duration_since(previous.captured_at)
+        .as_secs_f64();
     if elapsed_seconds <= f64::EPSILON {
         return (None, None);
     }
@@ -625,7 +645,11 @@ fn network_rates(
 #[cfg(test)]
 mod tests {
     use super::{parse_remote_metrics, parse_ssh_config};
-    use std::{fs, path::PathBuf, time::{SystemTime, UNIX_EPOCH}};
+    use std::{
+        fs,
+        path::PathBuf,
+        time::{SystemTime, UNIX_EPOCH},
+    };
 
     #[test]
     fn parses_basic_ssh_config_aliases() {
@@ -673,7 +697,10 @@ __DOCKER_END__
         assert_eq!(metrics.disks.len(), 1);
         assert_eq!(metrics.disks[0].mount_point, "/,/boot");
         assert_eq!(metrics.docker_containers.len(), 2);
-        assert_eq!(metrics.docker_containers[1].status, "Restarting (1) 10 seconds ago");
+        assert_eq!(
+            metrics.docker_containers[1].status,
+            "Restarting (1) 10 seconds ago"
+        );
     }
 
     fn unique_test_path(prefix: &str) -> PathBuf {
