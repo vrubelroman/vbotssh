@@ -114,7 +114,7 @@ fn render_host_column(frame: &mut Frame, area: Rect, host: &HostInfo, app: &App,
         .split(inner);
 
     let cpu_color = palette.severity_color(
-        host.metrics.cpu_usage_percent,
+        cpu_gauge_severity_value(host, app),
         app.config.cpu_warning_threshold,
         app.config.cpu_critical_threshold,
     );
@@ -123,7 +123,7 @@ fn render_host_column(frame: &mut Frame, area: Rect, host: &HostInfo, app: &App,
         layout[0],
         "CPU",
         host.metrics.cpu_usage_percent,
-        format!("{:.1}%", host.metrics.cpu_usage_percent),
+        cpu_gauge_label(host),
         cpu_color,
         palette,
     );
@@ -172,6 +172,48 @@ fn render_gauge(
         .label(label)
         .percent(value.clamp(0.0, 100.0).round() as u16);
     frame.render_widget(gauge, area);
+}
+
+fn cpu_gauge_label(host: &HostInfo) -> String {
+    match host.metrics.cpu_temperature_celsius {
+        Some(temp) => format!("{:.1}% | {:.1}C", host.metrics.cpu_usage_percent, temp),
+        None => format!("{:.1}%", host.metrics.cpu_usage_percent),
+    }
+}
+
+fn cpu_gauge_severity_value(host: &HostInfo, app: &App) -> f64 {
+    let usage_severity = severity_rank(
+        host.metrics.cpu_usage_percent,
+        app.config.cpu_warning_threshold,
+        app.config.cpu_critical_threshold,
+    );
+    let temp_severity = host
+        .metrics
+        .cpu_temperature_celsius
+        .map(|temp| {
+            severity_rank(
+                temp,
+                app.config.cpu_temp_warning_threshold,
+                app.config.cpu_temp_critical_threshold,
+            )
+        })
+        .unwrap_or(0);
+
+    match usage_severity.max(temp_severity) {
+        2 => app.config.cpu_critical_threshold,
+        1 => app.config.cpu_warning_threshold,
+        _ => 0.0,
+    }
+}
+
+fn severity_rank(value: f64, warning: f64, critical: f64) -> u8 {
+    if value >= critical {
+        2
+    } else if value >= warning {
+        1
+    } else {
+        0
+    }
 }
 
 fn render_disks(frame: &mut Frame, area: Rect, disks: &[DiskInfo], app: &App, palette: Palette) {

@@ -1,7 +1,7 @@
 use std::time::SystemTime;
 
 use anyhow::Result;
-use sysinfo::{CpuExt, DiskExt, System, SystemExt};
+use sysinfo::{ComponentExt, CpuExt, DiskExt, System, SystemExt};
 
 use crate::{
     collector::HostCollector,
@@ -48,6 +48,18 @@ impl LocalCollector {
 
         self.include_mountpoints.iter().any(|item| item == mount_point)
     }
+
+    fn cpu_temperature_celsius(&self) -> Option<f64> {
+        self.system
+            .components()
+            .iter()
+            .filter_map(|component| {
+                let temp = component.temperature();
+                temp.is_finite().then_some((component.label(), temp as f64))
+            })
+            .max_by_key(|(label, _)| cpu_component_score(label))
+            .map(|(_, temp)| temp)
+    }
 }
 
 impl HostCollector for LocalCollector {
@@ -58,6 +70,7 @@ impl HostCollector for LocalCollector {
     fn collect(&mut self) -> Result<HostInfo> {
         self.system.refresh_cpu();
         self.system.refresh_memory();
+        self.system.refresh_components();
         self.system.refresh_disks_list();
         self.system.refresh_disks();
 
@@ -106,6 +119,7 @@ impl HostCollector for LocalCollector {
             status: HostStatus::Online,
             metrics: MetricsSnapshot {
                 cpu_usage_percent: self.system.global_cpu_info().cpu_usage() as f64,
+                cpu_temperature_celsius: self.cpu_temperature_celsius(),
                 memory_used_bytes: used_memory,
                 memory_total_bytes: total_memory,
                 memory_usage_percent,
@@ -115,4 +129,20 @@ impl HostCollector for LocalCollector {
             last_error: None,
         })
     }
+}
+
+fn cpu_component_score(label: &str) -> usize {
+    let label = label.to_ascii_lowercase();
+
+    if label.contains("package id") || label.contains("tctl") || label.contains("tdie") {
+        return 4;
+    }
+    if label.contains("cpu") || label.contains("core") || label.contains("k10temp") {
+        return 3;
+    }
+    if label.contains("ccd") {
+        return 2;
+    }
+
+    1
 }

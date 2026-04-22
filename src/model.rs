@@ -32,6 +32,7 @@ pub enum HostStatus {
 #[derive(Clone, Debug, Default)]
 pub struct MetricsSnapshot {
     pub cpu_usage_percent: f64,
+    pub cpu_temperature_celsius: Option<f64>,
     pub memory_used_bytes: u64,
     pub memory_total_bytes: u64,
     pub memory_usage_percent: f64,

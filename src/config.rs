@@ -17,6 +17,8 @@ pub struct AppConfig {
     pub default_page_size: usize,
     pub cpu_warning_threshold: f64,
     pub cpu_critical_threshold: f64,
+    pub cpu_temp_warning_threshold: f64,
+    pub cpu_temp_critical_threshold: f64,
     pub ram_warning_threshold: f64,
     pub ram_critical_threshold: f64,
     pub disk_warning_threshold: f64,
@@ -73,6 +75,8 @@ impl Default for AppConfig {
             default_page_size: 3,
             cpu_warning_threshold: 60.0,
             cpu_critical_threshold: 85.0,
+            cpu_temp_warning_threshold: 55.0,
+            cpu_temp_critical_threshold: 70.0,
             ram_warning_threshold: 60.0,
             ram_critical_threshold: 85.0,
             disk_warning_threshold: 70.0,
@@ -150,6 +154,8 @@ struct RawAppConfig {
     default_page_size: Option<usize>,
     cpu_warning_threshold: Option<f64>,
     cpu_critical_threshold: Option<f64>,
+    cpu_temp_warning_threshold: Option<f64>,
+    cpu_temp_critical_threshold: Option<f64>,
     ram_warning_threshold: Option<f64>,
     ram_critical_threshold: Option<f64>,
     disk_warning_threshold: Option<f64>,
@@ -191,6 +197,10 @@ impl RawAppConfig {
         defaults.default_page_size = self.default_page_size.unwrap_or(defaults.default_page_size).max(1);
         defaults.cpu_warning_threshold = self.cpu_warning_threshold.unwrap_or(defaults.cpu_warning_threshold);
         defaults.cpu_critical_threshold = self.cpu_critical_threshold.unwrap_or(defaults.cpu_critical_threshold);
+        defaults.cpu_temp_warning_threshold =
+            self.cpu_temp_warning_threshold.unwrap_or(defaults.cpu_temp_warning_threshold);
+        defaults.cpu_temp_critical_threshold =
+            self.cpu_temp_critical_threshold.unwrap_or(defaults.cpu_temp_critical_threshold);
         defaults.ram_warning_threshold = self.ram_warning_threshold.unwrap_or(defaults.ram_warning_threshold);
         defaults.ram_critical_threshold = self.ram_critical_threshold.unwrap_or(defaults.ram_critical_threshold);
         defaults.disk_warning_threshold = self.disk_warning_threshold.unwrap_or(defaults.disk_warning_threshold);

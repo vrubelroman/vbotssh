@@ -7,6 +7,8 @@ default_page_size = 3
 
 cpu_warning_threshold = 60
 cpu_critical_threshold = 85
+cpu_temp_warning_threshold = 55
+cpu_temp_critical_threshold = 70
 ram_warning_threshold = 60
 ram_critical_threshold = 85
 disk_warning_threshold = 70
