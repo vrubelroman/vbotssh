@@ -1,9 +1,9 @@
-pkgname=vbotssh
-pkgver=0.1.0
+pkgname=vtopssh
+pkgver=0.1.3
 pkgrel=1
 pkgdesc="Terminal UI system monitor for Linux with remote host support over SSH"
 arch=("x86_64" "aarch64")
-url="https://github.com/vrubelroman/vbotssh"
+url="https://github.com/vrubelroman/vtopssh"
 license=("MIT")
 depends=("openssh" "iputils" "util-linux")
 optdepends=("docker: Docker widget support")
@@ -24,9 +24,9 @@ check() {
 package() {
   cd "$srcdir/$pkgname-$pkgver"
 
-  install -Dm755 "target/release/vbotssh" "$pkgdir/usr/bin/vbotssh"
-  install -Dm644 "README.md" "$pkgdir/usr/share/doc/vbotssh/README.md"
+  install -Dm755 "target/release/vtopssh" "$pkgdir/usr/bin/vtopssh"
+  install -Dm644 "README.md" "$pkgdir/usr/share/doc/vtopssh/README.md"
   install -Dm644 "assets/config.example.toml" \
-    "$pkgdir/usr/share/doc/vbotssh/config.example.toml"
-  install -Dm644 "LICENSE" "$pkgdir/usr/share/licenses/vbotssh/LICENSE"
+    "$pkgdir/usr/share/doc/vtopssh/config.example.toml"
+  install -Dm644 "LICENSE" "$pkgdir/usr/share/licenses/vtopssh/LICENSE"
 }

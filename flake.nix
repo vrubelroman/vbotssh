@@ -1,5 +1,5 @@
 {
-  description = "vbotssh terminal system monitor";
+  description = "vtopssh terminal system monitor";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
@@ -17,23 +17,23 @@
           pkgs.util-linux
         ];
         package = pkgs.rustPlatform.buildRustPackage {
-          pname = "vbotssh";
-          version = "0.1.0";
+          pname = "vtopssh";
+          version = "0.1.3";
           src = ./.;
           cargoLock.lockFile = ./Cargo.lock;
 
           nativeBuildInputs = [ pkgs.makeWrapper ];
 
           postInstall = ''
-            wrapProgram $out/bin/vbotssh \
+            wrapProgram $out/bin/vtopssh \
               --prefix PATH : ${runtimePath}
           '';
 
           meta = with lib; {
             description = "Terminal UI system monitor for Linux with remote host support over SSH";
-            homepage = "https://github.com/vrubelroman/vbotssh";
+            homepage = "https://github.com/vrubelroman/vtopssh";
             license = licenses.mit;
-            mainProgram = "vbotssh";
+            mainProgram = "vtopssh";
             platforms = platforms.linux;
           };
         };
@@ -42,7 +42,7 @@
 
         apps.default = {
           type = "app";
-          program = "${package}/bin/vbotssh";
+          program = "${package}/bin/vtopssh";
         };
 
         devShells.default = pkgs.mkShell {

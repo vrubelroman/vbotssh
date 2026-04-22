@@ -47,7 +47,7 @@ fn render_header(frame: &mut Frame, area: Rect, app: &App, palette: Palette) {
     let total_hosts = app.hosts.len().max(1);
     let title = Line::from(vec![
         Span::styled(
-            "vbotssh",
+            "vtopssh",
             Style::default()
                 .fg(palette.mauve)
                 .add_modifier(Modifier::BOLD),

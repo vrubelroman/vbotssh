@@ -1,6 +1,6 @@
-# vbotssh
+# vtopssh
 
-`vbotssh` is a Rust TUI monitor for Linux hosts. It shows local and remote hosts in one interface, polls remote machines over SSH, and renders CPU, temperature, RAM, disks, network throughput, and Docker container status.
+`vtopssh` is a Rust TUI monitor for Linux hosts. It shows local and remote hosts in one interface, polls remote machines over SSH, and renders CPU, temperature, RAM, disks, network throughput, and Docker container status.
 
 ## Features
 
@@ -13,7 +13,7 @@
 
 ## Runtime requirements
 
-`vbotssh` reads several metrics by calling standard Linux tools:
+`vtopssh` reads several metrics by calling standard Linux tools:
 
 - `ssh` from OpenSSH for remote polling;
 - `ping` from `iputils` when ping pre-check is enabled;
@@ -25,14 +25,14 @@
 The user config lives at:
 
 ```text
-~/.config/vbotssh/config.toml
+~/.config/vtopssh/config.toml
 ```
 
 Example setup:
 
 ```bash
-mkdir -p ~/.config/vbotssh
-cp assets/config.example.toml ~/.config/vbotssh/config.toml
+mkdir -p ~/.config/vtopssh
+cp assets/config.example.toml ~/.config/vtopssh/config.toml
 ```
 
 ## Running from source
@@ -48,23 +48,23 @@ cargo run --release
 Build and run directly from the flake:
 
 ```bash
-nix run github:vrubelroman/vbotssh?ref=v0.1.1
+nix run github:vrubelroman/vtopssh?ref=v0.1.3
 ```
 
 Install into the current profile:
 
 ```bash
-nix profile add github:vrubelroman/vbotssh?ref=v0.1.1
+nix profile add github:vrubelroman/vtopssh?ref=v0.1.3
 ```
 
-`nix profile add` installs `vbotssh` into the current user's Nix profile. It does not edit `configuration.nix`, does not rebuild NixOS, and does not make the package a declarative system package.
+`nix profile add` installs `vtopssh` into the current user's Nix profile. It does not edit `configuration.nix`, does not rebuild NixOS, and does not make the package a declarative system package.
 
 ### Debian / Ubuntu
 
 Release builds include a `.deb` artifact. Install it with:
 
 ```bash
-sudo apt install ./vbotssh_<version>_amd64.deb
+sudo apt install ./vtopssh_<version>_amd64.deb
 ```
 
 ### Arch Linux
@@ -77,7 +77,7 @@ makepkg -si
 
 ## Releases
 
-Tagging a version like `v0.1.0` triggers the GitHub Actions release workflow:
+Tagging a version like `v0.1.3` triggers the GitHub Actions release workflow:
 
 - runs `cargo test`;
 - builds the release binary;

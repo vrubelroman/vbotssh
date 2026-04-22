@@ -138,14 +138,14 @@ impl AppConfig {
 
     pub fn config_path() -> Result<PathBuf> {
         if let Ok(path) = env::var("XDG_CONFIG_HOME") {
-            return Ok(Path::new(&path).join("vbotssh").join("config.toml"));
+            return Ok(Path::new(&path).join("vtopssh").join("config.toml"));
         }
 
         let home =
             env::var("HOME").context("HOME is not set and XDG_CONFIG_HOME is unavailable")?;
         Ok(Path::new(&home)
             .join(".config")
-            .join("vbotssh")
+            .join("vtopssh")
             .join("config.toml"))
     }
 }

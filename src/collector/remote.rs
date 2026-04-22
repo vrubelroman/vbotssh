@@ -354,7 +354,7 @@ fn multiplex_control_path(alias: &str) -> PathBuf {
     let base_dir = env::var("XDG_RUNTIME_DIR")
         .map(PathBuf::from)
         .unwrap_or_else(|_| env::temp_dir());
-    base_dir.join("vbotssh-ssh").join(format!("{alias}-%C"))
+    base_dir.join("vtopssh-ssh").join(format!("{alias}-%C"))
 }
 
 fn remote_metrics_script() -> &'static str {
