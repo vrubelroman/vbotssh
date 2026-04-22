@@ -67,7 +67,7 @@ impl ThemeName {
 impl Default for AppConfig {
     fn default() -> Self {
         Self {
-            refresh_interval_ms: 1_000,
+            refresh_interval_ms: 5_000,
             theme: ThemeName::CatppuccinMocha,
             show_borders: true,
             compact_mode: false,

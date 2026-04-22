@@ -12,9 +12,9 @@ use crossterm::{
 use ratatui::{backend::CrosstermBackend, Terminal};
 
 use crate::{
-    collector::{local::LocalCollector, HostCollector},
+    collector::{local::LocalCollector, remote::load_remote_collectors, HostCollector},
     config::AppConfig,
-    model::HostInfo,
+    model::{HostInfo, HostStatus, HostType},
     navigation::Pager,
     ui,
 };
@@ -30,7 +30,14 @@ pub struct App {
 
 impl App {
     pub fn new(config: AppConfig) -> Self {
-        let collectors: Vec<Box<dyn HostCollector>> = vec![Box::new(LocalCollector::new(&config))];
+        let mut collectors: Vec<Box<dyn HostCollector>> = vec![Box::new(LocalCollector::new(&config))];
+        if let Ok(remote_collectors) = load_remote_collectors(&config) {
+            collectors.extend(
+                remote_collectors
+                    .into_iter()
+                    .map(|collector| Box::new(collector) as Box<dyn HostCollector>),
+            );
+        }
         let hosts = collectors
             .iter()
             .map(|collector| HostInfo::loading(collector.descriptor()))
@@ -64,6 +71,7 @@ impl App {
                 }
             })
             .collect();
+        sort_hosts(&mut self.hosts, self.config.ssh.unreachable_to_end);
         self.pager.clamp(self.hosts.len());
     }
 
@@ -172,4 +180,17 @@ fn compute_page_size(width: u16, configured_page_size: usize) -> usize {
         1
     };
     configured_page_size.min(max_by_terminal).max(1)
+}
+
+fn sort_hosts(hosts: &mut [HostInfo], unreachable_to_end: bool) {
+    if !unreachable_to_end {
+        return;
+    }
+
+    hosts.sort_by_key(|host| match (host.host_type, host.status) {
+        (HostType::Local, _) => (0_u8, 0_u8),
+        (HostType::Remote, HostStatus::Online | HostStatus::Loading) => (1_u8, 0_u8),
+        (HostType::Remote, HostStatus::Unreachable) => (2_u8, 0_u8),
+        (HostType::Remote, HostStatus::Error) => (3_u8, 0_u8),
+    });
 }

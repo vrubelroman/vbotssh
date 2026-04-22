@@ -232,16 +232,17 @@ fn render_disks(frame: &mut Frame, area: Rect, disks: &[DiskInfo], app: &App, pa
                 );
                 Line::from(vec![
                     Span::styled(
-                        format!("{:<10}", short_mount_label(&disk.mount_point)),
+                        format!("{:<10}", disk_label(disk)),
                         Style::default().fg(palette.sapphire).add_modifier(Modifier::BOLD),
                     ),
                     Span::raw(" "),
                     Span::styled(
                         format!(
-                            "{:>5.1}%  {} / {}",
+                            "{:>5.1}%  {} / {}{}",
                             disk.usage_percent,
                             format_bytes(disk.used_bytes),
-                            format_bytes(disk.total_bytes)
+                            format_bytes(disk.total_bytes),
+                            disk_mount_suffix(disk),
                         ),
                         Style::default().fg(color),
                     ),
@@ -375,11 +376,19 @@ fn host_status_label(status: HostStatus) -> &'static str {
     }
 }
 
-fn short_mount_label(mount_point: &str) -> String {
-    if mount_point == "/" {
-        "/".to_string()
+fn disk_label(disk: &DiskInfo) -> String {
+    if disk.name.is_empty() {
+        disk.mount_point.clone()
     } else {
-        mount_point.rsplit('/').next().unwrap_or(mount_point).to_string()
+        disk.name.clone()
+    }
+}
+
+fn disk_mount_suffix(disk: &DiskInfo) -> String {
+    if disk.mount_point.is_empty() {
+        String::new()
+    } else {
+        format!("  {}", disk.mount_point)
     }
 }
 

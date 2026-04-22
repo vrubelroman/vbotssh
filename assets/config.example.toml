@@ -1,4 +1,4 @@
-refresh_interval_ms = 1000
+refresh_interval_ms = 5000
 theme = "catppuccin_mocha"
 show_borders = true
 compact_mode = false
